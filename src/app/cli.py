@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Annotated
 
 import tyro
 
@@ -52,22 +53,22 @@ def _resolve_paths(supplied: tuple[Path, ...], n: int) -> tuple[Path | None, ...
     return tuple(padded[:n])
 
 
-def run(args: Cli) -> list[Path]:
+def run(cli: Annotated[Cli, tyro.conf.OmitArgPrefixes]) -> list[Path]:
     """Execute CLI logic. Returns paths written."""
-    if not args.targets:
+    if not cli.targets:
         raise SystemExit("error: at least one --targets value required")
-    universal = _READERS[args.source](args.source_path)
-    paths = _resolve_paths(args.target_paths, len(args.targets))
+    universal = _READERS[cli.source](cli.source_path)
+    paths = _resolve_paths(cli.target_paths, len(cli.targets))
     written: list[Path] = []
-    for kind, path in zip(args.targets, paths, strict=True):
+    for kind, path in zip(cli.targets, paths, strict=True):
         written.append(_WRITERS[kind](universal, path))
     return written
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Entry point. Parses argv via tyro, then runs and prints written paths."""
-    args = tyro.cli(Cli, args=argv)
-    for path in run(args):
+    """Entry point. Parses argv via tyro, runs, prints written paths."""
+    written = tyro.cli(run, args=argv)
+    for path in written:
         print(path)
 
 

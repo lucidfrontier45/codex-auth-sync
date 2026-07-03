@@ -1,16 +1,16 @@
 [project]
-name = "python-uv-template"
+name = "codex-auth-sync"
 version = "0.1.0"
-description = "A Project Template of Python with uv"
+description = "Sync Codex auth token across many coding agents"
 authors = [{ name = "杜世橋 Du Shiqiao", email = "lucidfrontier.45@gmail.com" }]
-requires-python = ">=3.13"
-dependencies = ["fastapi>=0.116.1", "uvicorn[standard]>=0.35.0"]
+requires-python = ">=3.14"
+dependencies = ["tyro>=1.0.15"]
 
 [project.scripts]
 app = "app.cli:main"
 
 [dependency-groups]
-dev = ["poethepoet>=0.45.0", "pytest-cov>=7.1.0", "ruff>=0.15.12", "ty>=0.0.35"]
+dev = ["poethepoet>=0.45.0", "ruff>=0.15.12", "ty>=0.0.35"]
 
 [build-system]
 requires = ["uv_build>=0.11.14,<0.12.0"]
@@ -26,13 +26,13 @@ module-name = ["app"]
 check = "ty check --fix ."
 lint = "ruff check --fix ."
 format = "ruff format ."
-test = "pytest tests -n auto --cov=app --cov-report=term --cov-report=xml"
+test = "pytest tests"
 
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::FutureWarning"]
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = [

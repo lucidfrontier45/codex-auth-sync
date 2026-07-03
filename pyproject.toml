@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-app = "app.cli:main"
+codex-auth-sync = "app.cli:main"
 
 [dependency-groups]
 dev = [

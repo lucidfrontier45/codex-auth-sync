@@ -8,7 +8,13 @@ from typing import Annotated
 
 import tyro
 
-from .types import CodexAuth, OpenCodeAuth, PiAuth, UniversalAuth
+from .types import (
+    CodexAuth,
+    ExpiryResolutionError,
+    OpenCodeAuth,
+    PiAuth,
+    UniversalAuth,
+)
 
 
 class AuthKind(StrEnum):
@@ -26,10 +32,54 @@ _READERS: dict[AuthKind, Callable[[Path | None], UniversalAuth]] = {
 }
 
 
+def _target_path(supplied: Path | None, default: Path) -> Path:
+    return supplied if supplied is not None else default
+
+
+def _write_codex(universal: UniversalAuth, path: Path | None) -> Path:
+    target = _target_path(path, CodexAuth.DEFAULT_PATH)
+    auth = (
+        CodexAuth.read(target).merge_from_universal(universal)
+        if target.exists()
+        else CodexAuth.from_universal(universal)
+    )
+    return auth.write(target)
+
+
+def _write_opencode(universal: UniversalAuth, path: Path | None) -> Path:
+    target = _target_path(path, OpenCodeAuth.DEFAULT_PATH)
+    try:
+        auth = (
+            OpenCodeAuth.read(target).merge_from_universal(universal)
+            if target.exists()
+            else OpenCodeAuth.from_universal(universal)
+        )
+    except ExpiryResolutionError as exc:
+        raise ExpiryResolutionError(
+            f"opencode target requires a usable OAuth expiry: {exc}"
+        ) from exc
+    return auth.write(target)
+
+
+def _write_pi(universal: UniversalAuth, path: Path | None) -> Path:
+    target = _target_path(path, PiAuth.DEFAULT_PATH)
+    try:
+        auth = (
+            PiAuth.read(target).merge_from_universal(universal)
+            if target.exists()
+            else PiAuth.from_universal(universal)
+        )
+    except ExpiryResolutionError as exc:
+        raise ExpiryResolutionError(
+            f"pi target requires a usable OAuth expiry: {exc}"
+        ) from exc
+    return auth.write(target)
+
+
 _WRITERS: dict[AuthKind, Callable[[UniversalAuth, Path | None], Path]] = {
-    AuthKind.codex: lambda u, p: CodexAuth.from_universal(u).write(p),
-    AuthKind.pi: lambda u, p: PiAuth.from_universal(u).write(p),
-    AuthKind.opencode: lambda u, p: OpenCodeAuth.from_universal(u).write(p),
+    AuthKind.codex: _write_codex,
+    AuthKind.pi: _write_pi,
+    AuthKind.opencode: _write_opencode,
 }
 
 

@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import base64
+import json
+
+import pytest
+
 from src.app.types import (
     CodexAuth,
     CodexTokens,
+    ExpiryResolutionError,
     OAuthAccount,
     OpenCodeAuth,
     PiAuth,
     UniversalAuth,
+    resolve_oauth_expires,
 )
 
 
@@ -93,6 +100,24 @@ def _expected_pi_dict() -> dict:
     }
 
 
+def _jwt_access_token(exp: int = 1_800_000_000) -> str:
+    header = (
+        base64.urlsafe_b64encode(
+            json.dumps({"alg": "none", "typ": "JWT"}).encode("utf-8")
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
+    payload = (
+        base64.urlsafe_b64encode(
+            json.dumps({"exp": exp, "scope": "read"}).encode("utf-8")
+        )
+        .decode("ascii")
+        .rstrip("=")
+    )
+    return f"{header}.{payload}.sig"
+
+
 # ── to_universal tests ──
 
 
@@ -146,6 +171,58 @@ class TestFromUniversal:
         out = PiAuth.from_universal(u)
         assert out.model_dump(by_alias=True) == _expected_pi_dict()
 
+    def test_opencode_from_universal_derives_expiry_from_jwt(self) -> None:
+        u = UniversalAuth(
+            access_token=_jwt_access_token(),
+            refresh_token="ref-ghi",
+            account_id="acct-123",
+            expires=None,
+        )
+        out = OpenCodeAuth.from_universal(u)
+        assert out.openai.expires == 1_800_000_000
+
+    def test_pi_from_universal_derives_expiry_from_zero_value(self) -> None:
+        u = UniversalAuth(
+            access_token=_jwt_access_token(),
+            refresh_token="ref-ghi",
+            account_id="acct-123",
+            expires=0,
+        )
+        out = PiAuth.from_universal(u)
+        assert out.openai_codex.expires == 1_800_000_000
+
+    @pytest.mark.parametrize(
+        ("access_token", "message"),
+        [
+            ("not-a-jwt", "three segments"),
+            ("a.b.c", "valid base64url"),
+            (
+                "a."
+                + base64.urlsafe_b64encode(b"[]").decode("ascii").rstrip("=")
+                + ".c",
+                "JSON object",
+            ),
+            (
+                "a."
+                + base64.urlsafe_b64encode(json.dumps({}).encode("utf-8"))
+                .decode("ascii")
+                .rstrip("=")
+                + ".c",
+                "exp claim",
+            ),
+        ],
+    )
+    def test_oauth_from_universal_requires_resolvable_expiry(
+        self, access_token: str, message: str
+    ) -> None:
+        u = UniversalAuth(
+            access_token=access_token,
+            refresh_token="ref-ghi",
+            account_id="acct-123",
+        )
+        with pytest.raises(ExpiryResolutionError, match=message):
+            OpenCodeAuth.from_universal(u)
+
 
 class TestRoundTrip:
     """Strict round-trips: source → universal → source."""
@@ -173,11 +250,23 @@ class TestCrossConvert:
     """Build universal from one source type, materialise as another."""
 
     def test_codex_as_opencode(self) -> None:
-        u = _codex_auth().to_universal()
+        codex = CodexAuth(
+            auth_mode="chatgpt",
+            OPENAI_API_KEY=None,
+            tokens=CodexTokens(
+                id_token="id-abc",
+                access_token=_jwt_access_token(),
+                refresh_token="ref-ghi",
+                account_id="acct-123",
+            ),
+            last_refresh="2026-07-03T12:00:00Z",
+        )
+        u = codex.to_universal()
         out = OpenCodeAuth.from_universal(u)
-        assert out.openai.access == "acc-def"
+        assert out.openai.access == _jwt_access_token()
         assert out.openai.refresh == "ref-ghi"
         assert out.openai.account_id == "acct-123"
+        assert out.openai.expires == 1_800_000_000
 
     def test_opencode_as_codex(self) -> None:
         u = _opencode_auth().to_universal()
@@ -246,3 +335,100 @@ class TestEdgeCases:
         assert p.openai_codex.account_id == "acct-x"
         assert p.openai_codex.expires == 999
         assert p.model_dump(by_alias=True)["openai-codex"]["access"] == "tok-a"
+
+    def test_resolve_oauth_expires_prefers_existing_expiry(self) -> None:
+        u = UniversalAuth(
+            access_token="not-needed",
+            refresh_token="ref",
+            account_id="acct",
+            expires=123,
+        )
+        assert resolve_oauth_expires(u) == 123
+
+
+class TestMergeFromUniversal:
+    def test_codex_merge_preserves_extras_and_missing_codex_fields(self) -> None:
+        auth = CodexAuth.model_validate(
+            {
+                "auth_mode": "chatgpt",
+                "OPENAI_API_KEY": "sk-existing",
+                "tokens": {
+                    "id_token": "id-existing",
+                    "access_token": "old-access",
+                    "refresh_token": "old-refresh",
+                    "account_id": "old-account",
+                    "scope": "offline",
+                },
+                "last_refresh": "2026-07-01T00:00:00Z",
+                "future_field": {"nested": True},
+            }
+        )
+        merged = auth.merge_from_universal(
+            UniversalAuth(
+                access_token="new-access",
+                refresh_token="new-refresh",
+                account_id="new-account",
+            )
+        )
+        assert merged.tokens.access_token == "new-access"
+        assert merged.tokens.refresh_token == "new-refresh"
+        assert merged.tokens.account_id == "new-account"
+        assert merged.tokens.id_token == "id-existing"
+        assert merged.last_refresh == "2026-07-01T00:00:00Z"
+        assert merged.OPENAI_API_KEY == "sk-existing"
+        assert merged.model_extra == {"future_field": {"nested": True}}
+        assert merged.tokens.model_extra == {"scope": "offline"}
+
+    def test_opencode_merge_preserves_top_level_and_nested_extras(self) -> None:
+        auth = OpenCodeAuth.model_validate(
+            {
+                "openai": {
+                    "type": "oauth",
+                    "access": "old-access",
+                    "refresh": "old-refresh",
+                    "expires": 7,
+                    "accountId": "old-account",
+                    "scope": "read-write",
+                },
+                "anthropic": {"key": "sk-ant"},
+            }
+        )
+        merged = auth.merge_from_universal(
+            UniversalAuth(
+                access_token=_jwt_access_token(),
+                refresh_token="new-refresh",
+                account_id="new-account",
+            )
+        )
+        assert merged.openai.access != "old-access"
+        assert merged.openai.refresh == "new-refresh"
+        assert merged.openai.account_id == "new-account"
+        assert merged.openai.expires == 1_800_000_000
+        assert merged.model_extra == {"anthropic": {"key": "sk-ant"}}
+        assert merged.openai.model_extra == {"scope": "read-write"}
+
+    def test_pi_merge_preserves_top_level_and_nested_extras(self) -> None:
+        auth = PiAuth.model_validate(
+            {
+                "openai-codex": {
+                    "type": "oauth",
+                    "access": "old-access",
+                    "refresh": "old-refresh",
+                    "expires": 7,
+                    "accountId": "old-account",
+                    "scope": "all",
+                },
+                "version": 3,
+            }
+        )
+        merged = auth.merge_from_universal(
+            UniversalAuth(
+                access_token=_jwt_access_token(),
+                refresh_token="new-refresh",
+                account_id="new-account",
+            )
+        )
+        assert merged.openai_codex.account_id == "new-account"
+        assert merged.openai_codex.expires == 1_800_000_000
+        assert merged.model_extra == {"version": 3}
+        assert merged.openai_codex.model_extra == {"scope": "all"}

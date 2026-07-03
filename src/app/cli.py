@@ -39,10 +39,10 @@ class Cli:
 
     source: AuthKind
     """Auth kind to read from."""
+    targets: tuple[AuthKind, ...]
+    """Auth kinds to write to (at least one)."""
     source_path: Path | None = None
     """Optional path to read from. Defaults to the kind's standard location."""
-    targets: tuple[AuthKind, ...] = ()
-    """Auth kinds to write to (at least one)."""
     target_paths: tuple[Path, ...] = ()
     """Optional output paths aligned positionally with --targets. Empty = defaults."""
 
@@ -55,8 +55,6 @@ def _resolve_paths(supplied: tuple[Path, ...], n: int) -> tuple[Path | None, ...
 
 def run(cli: Annotated[Cli, tyro.conf.OmitArgPrefixes]) -> list[Path]:
     """Execute CLI logic. Returns paths written."""
-    if not cli.targets:
-        raise SystemExit("error: at least one --targets value required")
     universal = _READERS[cli.source](cli.source_path)
     paths = _resolve_paths(cli.target_paths, len(cli.targets))
     written: list[Path] = []

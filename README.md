@@ -24,13 +24,13 @@ uv sync
 
 ```bash
 # Sync from Codex to Pi and OpenCode
-uv run app --source codex --targets pi opencode
+uv run codex-auth-sync --source codex --targets pi opencode
 
 # Sync from Pi to Codex
-uv run app --source pi --targets codex
+uv run codex-auth-sync --source pi --targets codex
 
 # Custom paths
-uv run app --source codex --targets pi \
+uv run codex-auth-sync --source codex --targets pi \
   --source-path ~/custom/auth.json \
   --target-paths ~/custom/pi.json
 ```

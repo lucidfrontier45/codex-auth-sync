@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import ClassVar, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEFAULT_CODEX_PATH: Path = Path.home() / ".codex" / "auth.json"
 DEFAULT_OPENCODE_PATH: Path = (
@@ -16,6 +16,18 @@ DEFAULT_PI_PATH: Path = Path.home() / ".pi" / "agent" / "auth.json"
 
 class ExpiryResolutionError(ValueError):
     """Raised when an OAuth expiry cannot be resolved from universal auth."""
+
+
+class OAuthAccountMissingError(ValueError):
+    """Raised when a source auth file lacks a usable OAuth account."""
+
+
+def _empty_oauth_account_to_none(value: object) -> object:
+    if value is None:
+        return None
+    if isinstance(value, dict) and not value:
+        return None
+    return value
 
 
 def _decode_jwt_payload(access_token: str) -> dict[str, object]:
@@ -151,7 +163,12 @@ class OpenCodeAuth(BaseModel):
 
     DEFAULT_PATH: ClassVar[Path] = DEFAULT_OPENCODE_PATH
 
-    openai: OAuthAccount
+    openai: OAuthAccount | None = None
+
+    @field_validator("openai", mode="before")
+    @classmethod
+    def _validate_openai(cls, value: object) -> object:
+        return _empty_oauth_account_to_none(value)
 
     @classmethod
     def read(cls, path: Path | str | None = None) -> OpenCodeAuth:
@@ -169,6 +186,10 @@ class OpenCodeAuth(BaseModel):
         return target
 
     def to_universal(self) -> UniversalAuth:
+        if self.openai is None:
+            raise OAuthAccountMissingError(
+                "OpenCodeAuth.openai source requires a non-empty oauth account"
+            )
         return UniversalAuth(
             access_token=self.openai.access,
             refresh_token=self.openai.refresh,
@@ -189,19 +210,26 @@ class OpenCodeAuth(BaseModel):
         )
 
     def merge_from_universal(self, u: UniversalAuth) -> OpenCodeAuth:
-        return self.model_copy(
-            update={
-                "openai": self.openai.model_copy(
-                    update={
-                        "type": "oauth",
-                        "access": u.access_token,
-                        "refresh": u.refresh_token,
-                        "expires": resolve_oauth_expires(u),
-                        "account_id": u.account_id,
-                    }
-                )
-            }
+        account = (
+            self.openai.model_copy(
+                update={
+                    "type": "oauth",
+                    "access": u.access_token,
+                    "refresh": u.refresh_token,
+                    "expires": resolve_oauth_expires(u),
+                    "account_id": u.account_id,
+                }
+            )
+            if self.openai is not None
+            else OAuthAccount(
+                type="oauth",
+                access=u.access_token,
+                refresh=u.refresh_token,
+                accountId=u.account_id,
+                expires=resolve_oauth_expires(u),
+            )
         )
+        return self.model_copy(update={"openai": account})
 
 
 class PiAuth(BaseModel):
@@ -211,7 +239,12 @@ class PiAuth(BaseModel):
 
     DEFAULT_PATH: ClassVar[Path] = DEFAULT_PI_PATH
 
-    openai_codex: OAuthAccount = Field(alias="openai-codex")
+    openai_codex: OAuthAccount | None = Field(default=None, alias="openai-codex")
+
+    @field_validator("openai_codex", mode="before")
+    @classmethod
+    def _validate_openai_codex(cls, value: object) -> object:
+        return _empty_oauth_account_to_none(value)
 
     @classmethod
     def read(cls, path: Path | str | None = None) -> PiAuth:
@@ -229,6 +262,10 @@ class PiAuth(BaseModel):
         return target
 
     def to_universal(self) -> UniversalAuth:
+        if self.openai_codex is None:
+            raise OAuthAccountMissingError(
+                "PiAuth.openai_codex source requires a non-empty oauth account"
+            )
         return UniversalAuth(
             access_token=self.openai_codex.access,
             refresh_token=self.openai_codex.refresh,
@@ -251,19 +288,26 @@ class PiAuth(BaseModel):
         )
 
     def merge_from_universal(self, u: UniversalAuth) -> PiAuth:
-        return self.model_copy(
-            update={
-                "openai_codex": self.openai_codex.model_copy(
-                    update={
-                        "type": "oauth",
-                        "access": u.access_token,
-                        "refresh": u.refresh_token,
-                        "expires": resolve_oauth_expires(u),
-                        "account_id": u.account_id,
-                    }
-                )
-            }
+        account = (
+            self.openai_codex.model_copy(
+                update={
+                    "type": "oauth",
+                    "access": u.access_token,
+                    "refresh": u.refresh_token,
+                    "expires": resolve_oauth_expires(u),
+                    "account_id": u.account_id,
+                }
+            )
+            if self.openai_codex is not None
+            else OAuthAccount(
+                type="oauth",
+                access=u.access_token,
+                refresh=u.refresh_token,
+                accountId=u.account_id,
+                expires=resolve_oauth_expires(u),
+            )
         )
+        return self.model_copy(update={"openai_codex": account})
 
 
 class UniversalAuth(BaseModel):

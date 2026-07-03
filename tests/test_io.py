@@ -62,6 +62,16 @@ def _pi_auth() -> PiAuth:
     )
 
 
+def _require_openai(auth: OpenCodeAuth) -> OAuthAccount:
+    assert auth.openai is not None
+    return auth.openai
+
+
+def _require_openai_codex(auth: PiAuth) -> OAuthAccount:
+    assert auth.openai_codex is not None
+    return auth.openai_codex
+
+
 # ── default paths ──
 
 
@@ -228,7 +238,7 @@ class TestExtraFields:
         auth.write(target)
         loaded = OpenCodeAuth.read(target)
         assert loaded.model_extra == {"anthropic": {"key": "sk-ant"}}
-        assert loaded.openai.model_extra == {"scope": "read-write"}
+        assert _require_openai(loaded).model_extra == {"scope": "read-write"}
 
     def test_pi_round_trip_with_extras(self, tmp_path: Path) -> None:
         target = tmp_path / "auth.json"
@@ -248,7 +258,7 @@ class TestExtraFields:
         auth.write(target)
         loaded = PiAuth.read(target)
         assert loaded.model_extra == {"version": 3}
-        assert loaded.openai_codex.model_extra == {"scope": "all"}
+        assert _require_openai_codex(loaded).model_extra == {"scope": "all"}
 
 
 # ── failure modes ──

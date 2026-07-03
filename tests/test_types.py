@@ -12,6 +12,7 @@ from src.app.types import (
     CodexTokens,
     ExpiryResolutionError,
     OAuthAccount,
+    OAuthAccountMissingError,
     OpenCodeAuth,
     PiAuth,
     UniversalAuth,
@@ -60,6 +61,16 @@ def _pi_auth() -> PiAuth:
             ),
         }
     )
+
+
+def _require_openai(auth: OpenCodeAuth) -> OAuthAccount:
+    assert auth.openai is not None
+    return auth.openai
+
+
+def _require_openai_codex(auth: PiAuth) -> OAuthAccount:
+    assert auth.openai_codex is not None
+    return auth.openai_codex
 
 
 def _expected_codex_dict() -> dict:
@@ -152,6 +163,22 @@ class TestToUniversal:
         assert u.expires == 1800000000
         assert u.id_token is None
 
+    def test_opencode_to_universal_rejects_missing_source_account(self) -> None:
+        auth = OpenCodeAuth(openai=None)
+        with pytest.raises(
+            OAuthAccountMissingError,
+            match="OpenCodeAuth\\.openai source requires a non-empty oauth account",
+        ):
+            auth.to_universal()
+
+    def test_pi_to_universal_rejects_missing_source_account(self) -> None:
+        auth = PiAuth.model_validate({"openai-codex": {}})
+        with pytest.raises(
+            OAuthAccountMissingError,
+            match="PiAuth\\.openai_codex source requires a non-empty oauth account",
+        ):
+            auth.to_universal()
+
 
 class TestFromUniversal:
     def test_codex_from_universal(self) -> None:
@@ -179,7 +206,7 @@ class TestFromUniversal:
             expires=None,
         )
         out = OpenCodeAuth.from_universal(u)
-        assert out.openai.expires == 1_800_000_000
+        assert _require_openai(out).expires == 1_800_000_000
 
     def test_pi_from_universal_derives_expiry_from_zero_value(self) -> None:
         u = UniversalAuth(
@@ -189,7 +216,7 @@ class TestFromUniversal:
             expires=0,
         )
         out = PiAuth.from_universal(u)
-        assert out.openai_codex.expires == 1_800_000_000
+        assert _require_openai_codex(out).expires == 1_800_000_000
 
     @pytest.mark.parametrize(
         ("access_token", "message"),
@@ -263,10 +290,11 @@ class TestCrossConvert:
         )
         u = codex.to_universal()
         out = OpenCodeAuth.from_universal(u)
-        assert out.openai.access == _jwt_access_token()
-        assert out.openai.refresh == "ref-ghi"
-        assert out.openai.account_id == "acct-123"
-        assert out.openai.expires == 1_800_000_000
+        openai = _require_openai(out)
+        assert openai.access == _jwt_access_token()
+        assert openai.refresh == "ref-ghi"
+        assert openai.account_id == "acct-123"
+        assert openai.expires == 1_800_000_000
 
     def test_opencode_as_codex(self) -> None:
         u = _opencode_auth().to_universal()
@@ -283,14 +311,16 @@ class TestCrossConvert:
     def test_pi_as_opencode(self) -> None:
         u = _pi_auth().to_universal()
         out = OpenCodeAuth.from_universal(u)
-        assert out.openai.access == "acc-def"
-        assert out.openai.refresh == "ref-ghi"
+        openai = _require_openai(out)
+        assert openai.access == "acc-def"
+        assert openai.refresh == "ref-ghi"
 
     def test_opencode_as_pi(self) -> None:
         u = _opencode_auth().to_universal()
         out = PiAuth.from_universal(u)
-        assert out.openai_codex.access == "acc-def"
-        assert out.openai_codex.refresh == "ref-ghi"
+        openai_codex = _require_openai_codex(out)
+        assert openai_codex.access == "acc-def"
+        assert openai_codex.refresh == "ref-ghi"
 
 
 class TestEdgeCases:
@@ -330,10 +360,11 @@ class TestEdgeCases:
                 ),
             }
         )
-        assert p.openai_codex.access == "tok-a"
-        assert p.openai_codex.refresh == "tok-r"
-        assert p.openai_codex.account_id == "acct-x"
-        assert p.openai_codex.expires == 999
+        openai_codex = _require_openai_codex(p)
+        assert openai_codex.access == "tok-a"
+        assert openai_codex.refresh == "tok-r"
+        assert openai_codex.account_id == "acct-x"
+        assert openai_codex.expires == 999
         assert p.model_dump(by_alias=True)["openai-codex"]["access"] == "tok-a"
 
     def test_resolve_oauth_expires_prefers_existing_expiry(self) -> None:
@@ -400,12 +431,13 @@ class TestMergeFromUniversal:
                 account_id="new-account",
             )
         )
-        assert merged.openai.access != "old-access"
-        assert merged.openai.refresh == "new-refresh"
-        assert merged.openai.account_id == "new-account"
-        assert merged.openai.expires == 1_800_000_000
+        openai = _require_openai(merged)
+        assert openai.access != "old-access"
+        assert openai.refresh == "new-refresh"
+        assert openai.account_id == "new-account"
+        assert openai.expires == 1_800_000_000
         assert merged.model_extra == {"anthropic": {"key": "sk-ant"}}
-        assert merged.openai.model_extra == {"scope": "read-write"}
+        assert openai.model_extra == {"scope": "read-write"}
 
     def test_pi_merge_preserves_top_level_and_nested_extras(self) -> None:
         auth = PiAuth.model_validate(
@@ -428,7 +460,8 @@ class TestMergeFromUniversal:
                 account_id="new-account",
             )
         )
-        assert merged.openai_codex.account_id == "new-account"
-        assert merged.openai_codex.expires == 1_800_000_000
+        openai_codex = _require_openai_codex(merged)
+        assert openai_codex.account_id == "new-account"
+        assert openai_codex.expires == 1_800_000_000
         assert merged.model_extra == {"version": 3}
-        assert merged.openai_codex.model_extra == {"scope": "all"}
+        assert openai_codex.model_extra == {"scope": "all"}

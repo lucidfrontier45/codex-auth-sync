@@ -14,6 +14,8 @@ from src.app.cli import AuthKind, Cli, main, run
 from src.app.types import (
     CodexAuth,
     ExpiryResolutionError,
+    OAuthAccount,
+    OAuthAccountMissingError,
     PiAuth,
 )
 
@@ -88,6 +90,11 @@ def _write(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _require_openai_codex(auth: PiAuth) -> OAuthAccount:
+    assert auth.openai_codex is not None
+    return auth.openai_codex
+
+
 # ── run() core logic ──
 
 
@@ -134,7 +141,7 @@ class TestRun:
         )
         assert written == [out_pi]
         loaded = PiAuth.read(out_pi)
-        assert loaded.openai_codex.access == "acc-def"
+        assert _require_openai_codex(loaded).access == "acc-def"
 
     def test_codex_to_opencode_preserves_existing_extras(self, tmp_path: Path) -> None:
         src = tmp_path / "src.json"
@@ -196,6 +203,44 @@ class TestRun:
         raw = json.loads(out_pi.read_text())
         assert raw["version"] == 3
         assert raw["openai-codex"]["scope"] == "all"
+        assert raw["openai-codex"]["expires"] == 1_800_000_000
+
+    def test_codex_to_existing_opencode_with_null_source_slot(
+        self, tmp_path: Path
+    ) -> None:
+        src = tmp_path / "src.json"
+        out_oc = tmp_path / "out_oc.json"
+        _write(src, _codex_payload_with_jwt())
+        _write(out_oc, {"openai": None, "anthropic": {"key": "sk-ant"}})
+        run(
+            Cli(
+                source=AuthKind.codex,
+                source_path=src,
+                targets=(AuthKind.opencode,),
+                target_paths=(out_oc,),
+            )
+        )
+        raw = json.loads(out_oc.read_text())
+        assert raw["anthropic"] == {"key": "sk-ant"}
+        assert raw["openai"]["access"] == _jwt_access_token()
+        assert raw["openai"]["expires"] == 1_800_000_000
+
+    def test_codex_to_existing_pi_with_empty_source_slot(self, tmp_path: Path) -> None:
+        src = tmp_path / "src.json"
+        out_pi = tmp_path / "out_pi.json"
+        _write(src, _codex_payload_with_jwt())
+        _write(out_pi, {"openai-codex": {}, "version": 3})
+        run(
+            Cli(
+                source=AuthKind.codex,
+                source_path=src,
+                targets=(AuthKind.pi,),
+                target_paths=(out_pi,),
+            )
+        )
+        raw = json.loads(out_pi.read_text())
+        assert raw["version"] == 3
+        assert raw["openai-codex"]["access"] == _jwt_access_token()
         assert raw["openai-codex"]["expires"] == 1_800_000_000
 
     def test_pi_to_codex(self, tmp_path: Path) -> None:
@@ -315,6 +360,20 @@ class TestRun:
             run(
                 Cli(
                     source=AuthKind.codex,
+                    source_path=src,
+                    targets=(AuthKind.pi,),
+                    target_paths=(out_pi,),
+                )
+            )
+
+    def test_opencode_source_with_empty_account_fails(self, tmp_path: Path) -> None:
+        src = tmp_path / "src.json"
+        out_pi = tmp_path / "out_pi.json"
+        _write(src, {"openai": {}})
+        with pytest.raises(OAuthAccountMissingError, match="OpenCodeAuth\\.openai"):
+            run(
+                Cli(
+                    source=AuthKind.opencode,
                     source_path=src,
                     targets=(AuthKind.pi,),
                     target_paths=(out_pi,),

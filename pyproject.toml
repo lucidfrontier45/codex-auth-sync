@@ -1,0 +1,58 @@
+[project]
+name = "python-uv-template"
+version = "0.1.0"
+description = "A Project Template of Python with uv"
+authors = [{ name = "杜世橋 Du Shiqiao", email = "lucidfrontier.45@gmail.com" }]
+requires-python = ">=3.13"
+dependencies = ["fastapi>=0.116.1", "uvicorn[standard]>=0.35.0"]
+
+[project.scripts]
+app = "app.cli:main"
+
+[dependency-groups]
+dev = ["poethepoet>=0.45.0", "pytest-cov>=7.1.0", "ruff>=0.15.12", "ty>=0.0.35"]
+
+[build-system]
+requires = ["uv_build>=0.11.14,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+managed = true
+
+[tool.uv.build-backend]
+module-name = ["app"]
+
+[tool.poe.tasks]
+check = "ty check --fix ."
+lint = "ruff check --fix ."
+format = "ruff format ."
+test = "pytest tests -n auto --cov=app --cov-report=term --cov-report=xml"
+
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::FutureWarning"]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "B",
+    "RUF",
+    "UP",
+    "N",
+    "SIM",
+    "A",
+    "S",
+    "DTZ",
+    "PIE",
+    "PLE",
+]
+# add directory names to exclude from analysis
+exclude = ["tests/**/*", "deps/**/*"]
+
+[tool.ruff.lint.per-file-ignores]
+"*/__init__.py" = ['F401']

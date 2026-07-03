@@ -1,4 +1,8 @@
-def main():
+def hello() -> str:
+    return "hello"
+
+
+def main() -> None:
     print(hello())
 
 

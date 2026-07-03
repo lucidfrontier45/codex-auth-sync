@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from typing import Literal
+from pathlib import Path
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+DEFAULT_CODEX_PATH: Path = Path.home() / ".codex" / "auth.json"
+DEFAULT_OPENCODE_PATH: Path = (
+    Path.home() / ".local" / "share" / "opencode" / "auth.json"
+)
+DEFAULT_PI_PATH: Path = Path.home() / ".pi" / "agent" / "auth.json"
+
 
 class CodexTokens(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     id_token: str
     access_token: str
     refresh_token: str
@@ -13,10 +22,29 @@ class CodexTokens(BaseModel):
 
 
 class CodexAuth(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    DEFAULT_PATH: ClassVar[Path] = DEFAULT_CODEX_PATH
+
     auth_mode: Literal["chatgpt"]
     OPENAI_API_KEY: str | None
     tokens: CodexTokens
     last_refresh: str
+
+    @classmethod
+    def read(cls, path: Path | str | None = None) -> CodexAuth:
+        """Load auth from JSON file. Defaults to ~/.codex/auth.json."""
+        target = Path(path) if path is not None else cls.DEFAULT_PATH
+        return cls.model_validate_json(target.read_text(encoding="utf-8"))
+
+    def write(self, path: Path | str | None = None) -> Path:
+        """Persist auth to JSON file. Defaults to ~/.codex/auth.json. Returns path."""
+        target = Path(path) if path is not None else self.DEFAULT_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            self.model_dump_json(by_alias=True, indent=2), encoding="utf-8"
+        )
+        return target
 
     def to_universal(self) -> UniversalAuth:
         return UniversalAuth(
@@ -45,7 +73,7 @@ class CodexAuth(BaseModel):
 
 
 class OAuthAccount(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
     type: Literal["oauth"]
     access: str
@@ -55,7 +83,26 @@ class OAuthAccount(BaseModel):
 
 
 class OpenCodeAuth(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    DEFAULT_PATH: ClassVar[Path] = DEFAULT_OPENCODE_PATH
+
     openai: OAuthAccount
+
+    @classmethod
+    def read(cls, path: Path | str | None = None) -> OpenCodeAuth:
+        """Load auth from JSON file. Defaults to ~/.local/share/opencode/auth.json."""
+        target = Path(path) if path is not None else cls.DEFAULT_PATH
+        return cls.model_validate_json(target.read_text(encoding="utf-8"))
+
+    def write(self, path: Path | str | None = None) -> Path:
+        """Persist auth to JSON file. Returns path. Aliases used on disk."""
+        target = Path(path) if path is not None else self.DEFAULT_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            self.model_dump_json(by_alias=True, indent=2), encoding="utf-8"
+        )
+        return target
 
     def to_universal(self) -> UniversalAuth:
         return UniversalAuth(
@@ -81,9 +128,26 @@ class OpenCodeAuth(BaseModel):
 class PiAuth(BaseModel):
     """PiAuth uses a hyphenated key that maps to a Python-safe field name via alias."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    DEFAULT_PATH: ClassVar[Path] = DEFAULT_PI_PATH
 
     openai_codex: OAuthAccount = Field(alias="openai-codex")
+
+    @classmethod
+    def read(cls, path: Path | str | None = None) -> PiAuth:
+        """Load auth from JSON file. Defaults to ~/.pi/agent/auth.json."""
+        target = Path(path) if path is not None else cls.DEFAULT_PATH
+        return cls.model_validate_json(target.read_text(encoding="utf-8"))
+
+    def write(self, path: Path | str | None = None) -> Path:
+        """Persist auth to JSON file. Returns path. Hyphenated alias used on disk."""
+        target = Path(path) if path is not None else self.DEFAULT_PATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            self.model_dump_json(by_alias=True, indent=2), encoding="utf-8"
+        )
+        return target
 
     def to_universal(self) -> UniversalAuth:
         return UniversalAuth(

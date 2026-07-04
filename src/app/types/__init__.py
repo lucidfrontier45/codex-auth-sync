@@ -17,6 +17,7 @@ from .common import (
     ExpiryResolutionError,
     OAuthAccount,
     OAuthAccountMissingError,
+    Timestamp,
     UniversalAuth,
     resolve_oauth_expires,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "OAuthAccountMissingError",
     "OpenCodeAuth",
     "PiAuth",
+    "Timestamp",
     "UniversalAuth",
     "resolve_oauth_expires",
 ]

@@ -42,7 +42,7 @@ def _opencode_auth() -> OpenCodeAuth:
             type="oauth",
             access="acc-def",
             refresh="ref-ghi",
-            expires=1_800_000_000,
+            expires=1_800_000_000_000,  # ty: ignore
             accountId="acct-123",
         ),
     )
@@ -55,7 +55,7 @@ def _pi_auth() -> PiAuth:
                 type="oauth",
                 access="acc-def",
                 refresh="ref-ghi",
-                expires=1_800_000_000,
+                expires=1_800_000_000_000,  # ty: ignore
                 accountId="acct-123",
             ),
         }
@@ -228,7 +228,7 @@ class TestExtraFields:
                     "type": "oauth",
                     "access": "acc-def",
                     "refresh": "ref-ghi",
-                    "expires": 1_800_000_000,
+                    "expires": 1_800_000_000_000,
                     "accountId": "acct-123",
                     "scope": "read-write",
                 },
@@ -248,7 +248,7 @@ class TestExtraFields:
                     "type": "oauth",
                     "access": "acc-def",
                     "refresh": "ref-ghi",
-                    "expires": 1_800_000_000,
+                    "expires": 1_800_000_000_000,
                     "accountId": "acct-123",
                     "scope": "all",
                 },

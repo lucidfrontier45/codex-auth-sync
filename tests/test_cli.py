@@ -43,7 +43,7 @@ def _opencode_payload() -> dict:
             "type": "oauth",
             "access": "acc-def",
             "refresh": "ref-ghi",
-            "expires": 1_800_000_000,
+            "expires": 1_800_000_000_000,
             "accountId": "acct-123",
         },
     }
@@ -55,7 +55,7 @@ def _pi_payload() -> dict:
             "type": "oauth",
             "access": "acc-def",
             "refresh": "ref-ghi",
-            "expires": 1_800_000_000,
+            "expires": 1_800_000_000_000,
             "accountId": "acct-123",
         },
     }
@@ -120,12 +120,12 @@ class TestRun:
                 "type": "oauth",
                 "access": _jwt_access_token(),
                 "refresh": "ref-ghi",
-                "expires": 1_800_000_000,
+                "expires": 1_800_000_000_000,
                 "accountId": "acct-123",
             }
         }
         opencode_raw = json.loads(out_oc.read_text())
-        assert opencode_raw["openai"]["expires"] == 1_800_000_000
+        assert opencode_raw["openai"]["expires"] == 1_800_000_000_000
 
     def test_opencode_to_pi(self, tmp_path: Path) -> None:
         src = tmp_path / "src.json"
@@ -154,7 +154,7 @@ class TestRun:
                     "type": "oauth",
                     "access": "old-access",
                     "refresh": "old-refresh",
-                    "expires": 7,
+                    "expires": 2_000_000_000_000,
                     "accountId": "old-account",
                     "scope": "read-write",
                 },
@@ -172,7 +172,7 @@ class TestRun:
         raw = json.loads(out_oc.read_text())
         assert raw["anthropic"] == {"key": "sk-ant"}
         assert raw["openai"]["scope"] == "read-write"
-        assert raw["openai"]["expires"] == 1_800_000_000
+        assert raw["openai"]["expires"] == 1_800_000_000_000
 
     def test_codex_to_pi_preserves_existing_extras(self, tmp_path: Path) -> None:
         src = tmp_path / "src.json"
@@ -185,7 +185,7 @@ class TestRun:
                     "type": "oauth",
                     "access": "old-access",
                     "refresh": "old-refresh",
-                    "expires": 7,
+                    "expires": 2_000_000_000_000,
                     "accountId": "old-account",
                     "scope": "all",
                 },
@@ -203,7 +203,7 @@ class TestRun:
         raw = json.loads(out_pi.read_text())
         assert raw["version"] == 3
         assert raw["openai-codex"]["scope"] == "all"
-        assert raw["openai-codex"]["expires"] == 1_800_000_000
+        assert raw["openai-codex"]["expires"] == 1_800_000_000_000
 
     def test_codex_to_existing_opencode_with_null_source_slot(
         self, tmp_path: Path
@@ -223,7 +223,7 @@ class TestRun:
         raw = json.loads(out_oc.read_text())
         assert raw["anthropic"] == {"key": "sk-ant"}
         assert raw["openai"]["access"] == _jwt_access_token()
-        assert raw["openai"]["expires"] == 1_800_000_000
+        assert raw["openai"]["expires"] == 1_800_000_000_000
 
     def test_codex_to_existing_pi_with_empty_source_slot(self, tmp_path: Path) -> None:
         src = tmp_path / "src.json"
@@ -241,7 +241,7 @@ class TestRun:
         raw = json.loads(out_pi.read_text())
         assert raw["version"] == 3
         assert raw["openai-codex"]["access"] == _jwt_access_token()
-        assert raw["openai-codex"]["expires"] == 1_800_000_000
+        assert raw["openai-codex"]["expires"] == 1_800_000_000_000
 
     def test_pi_to_codex(self, tmp_path: Path) -> None:
         src = tmp_path / "src.json"

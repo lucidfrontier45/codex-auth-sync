@@ -43,7 +43,7 @@ def _opencode_auth() -> OpenCodeAuth:
             type="oauth",
             access="acc-def",
             refresh="ref-ghi",
-            expires=1800000000,
+            expires=1_800_000_000_000,  # ty: ignore
             accountId="acct-123",
         ),
     )
@@ -56,7 +56,7 @@ def _pi_auth() -> PiAuth:
                 type="oauth",
                 access="acc-def",
                 refresh="ref-ghi",
-                expires=1800000000,
+                expires=1_800_000_000_000,  # ty: ignore
                 accountId="acct-123",
             ),
         }
@@ -93,7 +93,7 @@ def _expected_opencode_dict() -> dict:
             "type": "oauth",
             "access": "acc-def",
             "refresh": "ref-ghi",
-            "expires": 1800000000,
+            "expires": 1_800_000_000_000,
             "account_id": "acct-123",
         },
     }
@@ -105,7 +105,7 @@ def _expected_pi_dict() -> dict:
             "type": "oauth",
             "access": "acc-def",
             "refresh": "ref-ghi",
-            "expires": 1800000000,
+            "expires": 1_800_000_000_000,
             "accountId": "acct-123",
         },
     }
@@ -149,7 +149,8 @@ class TestToUniversal:
         assert u.access_token == "acc-def"
         assert u.refresh_token == "ref-ghi"
         assert u.account_id == "acct-123"
-        assert u.expires == 1800000000
+        assert u.expires is not None
+        assert u.expires.value == 1_800_000_000_000
         assert u.id_token is None
         assert u.last_refresh is None
         assert u.openai_api_key is None
@@ -160,7 +161,8 @@ class TestToUniversal:
         assert u.access_token == "acc-def"
         assert u.refresh_token == "ref-ghi"
         assert u.account_id == "acct-123"
-        assert u.expires == 1800000000
+        assert u.expires is not None
+        assert u.expires.value == 1_800_000_000_000
         assert u.id_token is None
 
     def test_opencode_to_universal_rejects_missing_source_account(self) -> None:
@@ -206,17 +208,17 @@ class TestFromUniversal:
             expires=None,
         )
         out = OpenCodeAuth.from_universal(u)
-        assert _require_openai(out).expires == 1_800_000_000
+        assert _require_openai(out).expires.value == 1_800_000_000_000
 
     def test_pi_from_universal_derives_expiry_from_zero_value(self) -> None:
         u = UniversalAuth(
             access_token=_jwt_access_token(),
             refresh_token="ref-ghi",
             account_id="acct-123",
-            expires=0,
+            expires=None,
         )
         out = PiAuth.from_universal(u)
-        assert _require_openai_codex(out).expires == 1_800_000_000
+        assert _require_openai_codex(out).expires.value == 1_800_000_000_000
 
     @pytest.mark.parametrize(
         ("access_token", "message"),
@@ -294,7 +296,7 @@ class TestCrossConvert:
         assert openai.access == _jwt_access_token()
         assert openai.refresh == "ref-ghi"
         assert openai.account_id == "acct-123"
-        assert openai.expires == 1_800_000_000
+        assert openai.expires.value == 1_800_000_000_000
 
     def test_opencode_as_codex(self) -> None:
         u = _opencode_auth().to_universal()
@@ -355,7 +357,7 @@ class TestEdgeCases:
                     type="oauth",
                     access="tok-a",
                     refresh="tok-r",
-                    expires=999,
+                    expires=1_800_000_000_000,  # ty: ignore
                     accountId="acct-x",
                 ),
             }
@@ -364,7 +366,7 @@ class TestEdgeCases:
         assert openai_codex.access == "tok-a"
         assert openai_codex.refresh == "tok-r"
         assert openai_codex.account_id == "acct-x"
-        assert openai_codex.expires == 999
+        assert openai_codex.expires.value == 1_800_000_000_000
         assert p.model_dump(by_alias=True)["openai-codex"]["access"] == "tok-a"
 
     def test_resolve_oauth_expires_prefers_existing_expiry(self) -> None:
@@ -372,9 +374,9 @@ class TestEdgeCases:
             access_token="not-needed",
             refresh_token="ref",
             account_id="acct",
-            expires=123,
+            expires=1_800_000_000_000,  # ty: ignore
         )
-        assert resolve_oauth_expires(u) == 123
+        assert resolve_oauth_expires(u).value == 1_800_000_000_000
 
 
 class TestMergeFromUniversal:
@@ -417,7 +419,7 @@ class TestMergeFromUniversal:
                     "type": "oauth",
                     "access": "old-access",
                     "refresh": "old-refresh",
-                    "expires": 7,
+                    "expires": 2_000_000_000_000,
                     "accountId": "old-account",
                     "scope": "read-write",
                 },
@@ -435,7 +437,7 @@ class TestMergeFromUniversal:
         assert openai.access != "old-access"
         assert openai.refresh == "new-refresh"
         assert openai.account_id == "new-account"
-        assert openai.expires == 1_800_000_000
+        assert openai.expires.value == 1_800_000_000_000
         assert merged.model_extra == {"anthropic": {"key": "sk-ant"}}
         assert openai.model_extra == {"scope": "read-write"}
 
@@ -446,7 +448,7 @@ class TestMergeFromUniversal:
                     "type": "oauth",
                     "access": "old-access",
                     "refresh": "old-refresh",
-                    "expires": 7,
+                    "expires": 2_000_000_000_000,
                     "accountId": "old-account",
                     "scope": "all",
                 },
@@ -462,6 +464,6 @@ class TestMergeFromUniversal:
         )
         openai_codex = _require_openai_codex(merged)
         assert openai_codex.account_id == "new-account"
-        assert openai_codex.expires == 1_800_000_000
+        assert openai_codex.expires.value == 1_800_000_000_000
         assert merged.model_extra == {"version": 3}
         assert openai_codex.model_extra == {"scope": "all"}
